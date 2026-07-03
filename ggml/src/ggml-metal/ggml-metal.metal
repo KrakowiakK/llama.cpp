@@ -9425,6 +9425,29 @@ kernel void kernel_diag_f32(
     }
 }
 
+// GGML_OP_DIAG_MASK_INF / GGML_OP_DIAG_MASK_ZERO
+// shared kernel; args.value selects the fill (-INFINITY for _INF, 0 for _ZERO)
+kernel void kernel_diag_mask_f32(
+        constant ggml_metal_kargs_diag_mask & args,
+        device   const char * src0,
+        device         char * dst,
+        uint3  tgpig[[threadgroup_position_in_grid]],
+        ushort tiitg[[thread_index_in_threadgroup]]) {
+    constexpr short NW = N_SIMDWIDTH;
+
+    const int32_t i3 = tgpig.z;
+    const int32_t i2 = tgpig.y;
+    const int32_t i1 = tgpig.x;
+
+    device const float * src0_ptr = (device const float *)(src0 + i1*args.nb01 + i2*args.nb02 + i3*args.nb03);
+    device       float * dst_ptr  = (device       float *)(dst  + i1*args.nb1  + i2*args.nb2  + i3*args.nb3);
+
+    // mask the strictly-upper triangle (offset by n_past) with args.value; copy the rest
+    for (int i0 = tiitg; i0 < args.ne0; i0 += NW) {
+        dst_ptr[i0] = i0 > args.n_past + i1 ? args.value : src0_ptr[i0];
+    }
+}
+
 constant bool FC_mul_mm_bc_inp [[function_constant(FC_MUL_MM + 0)]];
 constant bool FC_mul_mm_bc_out [[function_constant(FC_MUL_MM + 1)]];
 constant short FC_mul_mm_ne12  [[function_constant(FC_MUL_MM + 2)]];

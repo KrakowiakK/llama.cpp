@@ -4752,22 +4752,55 @@ struct test_diag_mask_inf : public test_case {
     const ggml_type type;
     const std::array<int64_t, 4> ne;
     const int n_past;
+    const bool inplace;
 
     std::string vars() override {
-        return VARS_TO_STR3(type, ne, n_past);
+        return VARS_TO_STR4(type, ne, n_past, inplace);
     }
 
     test_diag_mask_inf(ggml_type type = GGML_TYPE_F32,
             std::array<int64_t, 4> ne = {10, 10, 3, 2},
-            int n_past = 5)
-        : type(type), ne(ne), n_past(n_past) {}
+            int n_past = 5,
+            bool inplace = false)
+        : type(type), ne(ne), n_past(n_past), inplace(inplace) {}
 
     ggml_tensor * build_graph(ggml_context * ctx) override {
         ggml_tensor * a = ggml_new_tensor(ctx, type, 4, ne.data());
         ggml_set_param(a);
         ggml_set_name(a, "a");
 
-        ggml_tensor * out = ggml_diag_mask_inf(ctx, a, n_past);
+        ggml_tensor * out = inplace ? ggml_diag_mask_inf_inplace(ctx, a, n_past)
+                                    : ggml_diag_mask_inf(ctx, a, n_past);
+        ggml_set_name(out, "out");
+
+        return out;
+    }
+};
+
+// GGML_OP_DIAG_MASK_ZERO
+struct test_diag_mask_zero : public test_case {
+    const ggml_type type;
+    const std::array<int64_t, 4> ne;
+    const int n_past;
+    const bool inplace;
+
+    std::string vars() override {
+        return VARS_TO_STR4(type, ne, n_past, inplace);
+    }
+
+    test_diag_mask_zero(ggml_type type = GGML_TYPE_F32,
+            std::array<int64_t, 4> ne = {10, 10, 3, 2},
+            int n_past = 5,
+            bool inplace = false)
+        : type(type), ne(ne), n_past(n_past), inplace(inplace) {}
+
+    ggml_tensor * build_graph(ggml_context * ctx) override {
+        ggml_tensor * a = ggml_new_tensor(ctx, type, 4, ne.data());
+        ggml_set_param(a);
+        ggml_set_name(a, "a");
+
+        ggml_tensor * out = inplace ? ggml_diag_mask_zero_inplace(ctx, a, n_past)
+                                    : ggml_diag_mask_zero(ctx, a, n_past);
         ggml_set_name(out, "out");
 
         return out;
@@ -8757,6 +8790,26 @@ static std::vector<std::unique_ptr<test_case>> make_test_cases_eval() {
     test_cases.emplace_back(new test_diag_mask_inf(GGML_TYPE_F32, {10, 10, 1, 1}, 5));
     test_cases.emplace_back(new test_diag_mask_inf(GGML_TYPE_F32, {10, 10, 3, 1}, 5));
     test_cases.emplace_back(new test_diag_mask_inf(GGML_TYPE_F32, {10, 10, 3, 2}, 5));
+    test_cases.emplace_back(new test_diag_mask_inf(GGML_TYPE_F32, {10, 10, 1, 1}, 0));  // strict upper triangle
+    test_cases.emplace_back(new test_diag_mask_inf(GGML_TYPE_F32, {10, 10, 1, 1}, 20)); // n_past >= ne0: nothing masked
+    test_cases.emplace_back(new test_diag_mask_inf(GGML_TYPE_F32, {16, 16, 1, 1}, 8));
+    test_cases.emplace_back(new test_diag_mask_inf(GGML_TYPE_F32, {33, 17, 2, 3}, 5));  // non-square, ne0 not a multiple of the simd width, batched
+    test_cases.emplace_back(new test_diag_mask_inf(GGML_TYPE_F32, {1, 1, 1, 1}, 0));    // degenerate
+    test_cases.emplace_back(new test_diag_mask_inf(GGML_TYPE_F32, {100, 100, 1, 1}, 50));
+    test_cases.emplace_back(new test_diag_mask_inf(GGML_TYPE_F32, {10, 10, 3, 2}, 5, true));  // inplace
+    test_cases.emplace_back(new test_diag_mask_inf(GGML_TYPE_F32, {33, 17, 2, 3}, 5, true));  // inplace, non-square batched
+    test_cases.emplace_back(new test_diag_mask_inf(GGML_TYPE_F32, {512, 512, 8, 1}, 256));    // attention-sized, batched (heads)
+    test_cases.emplace_back(new test_diag_mask_inf(GGML_TYPE_F32, {2048, 2048, 1, 1}, 1024)); // large
+
+    test_cases.emplace_back(new test_diag_mask_zero(GGML_TYPE_F32, {10, 10, 1, 1}, 5));
+    test_cases.emplace_back(new test_diag_mask_zero(GGML_TYPE_F32, {10, 10, 3, 2}, 5));
+    test_cases.emplace_back(new test_diag_mask_zero(GGML_TYPE_F32, {10, 10, 1, 1}, 0));
+    test_cases.emplace_back(new test_diag_mask_zero(GGML_TYPE_F32, {10, 10, 1, 1}, 20));
+    test_cases.emplace_back(new test_diag_mask_zero(GGML_TYPE_F32, {33, 17, 2, 3}, 5));
+    test_cases.emplace_back(new test_diag_mask_zero(GGML_TYPE_F32, {1, 1, 1, 1}, 0));
+    test_cases.emplace_back(new test_diag_mask_zero(GGML_TYPE_F32, {100, 100, 1, 1}, 50));
+    test_cases.emplace_back(new test_diag_mask_zero(GGML_TYPE_F32, {10, 10, 3, 2}, 5, true));  // inplace
+    test_cases.emplace_back(new test_diag_mask_zero(GGML_TYPE_F32, {512, 512, 4, 1}, 100));    // attention-sized, batched
 
 #if 0
     std::uniform_int_distribution<> dist_ne1(1, 50);
